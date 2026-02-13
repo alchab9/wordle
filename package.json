@@ -1,0 +1,16 @@
+{
+  "name": "wordle",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && cp words.json dist/",
+    "build:pages": "tsc && rm -rf _site && mkdir -p _site && cp -r dist _site/ && cp words.json index.html _site/",
+    "start": "npm run build && node server.js",
+    "cli": "node dist/index.js",
+    "dev": "npm run build && node server.js"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "typescript": "^5.6.3"
+  }
+}

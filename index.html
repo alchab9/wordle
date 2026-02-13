@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wordle Solver</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #121213;
+      --surface: #121213;
+      --border: #3a3a3c;
+      --border-empty: #3a3a3c;
+      --text: #ffffff;
+      --muted: #888;
+      --green: #538d4e;
+      --yellow: #b59f3b;
+      --gray: #3a3a3c;
+      --pending: #3d3d4a;
+      --cell-size: 62px;
+    }
+
+    body.octordle-mode {
+      --cell-size: 44px;
+    }
+    body.octordle-mode .grid .cell {
+      font-size: 1.25rem;
+    }
+
+    /* Octordle wins on the left, fixed so they stay on screen */
+    .octordle-wins-holder {
+      position: fixed;
+      left: 1.5rem;
+      top: 6rem;
+      width: 155px;
+      z-index: 10;
+    }
+
+    .octordle-wins-strip-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .octordle-win-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      color: var(--text);
+      white-space: nowrap;
+      padding: 0.35rem 0.6rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .octordle-win-item .octordle-result-guesses {
+      margin-left: 0.15rem;
+      font-size: 0.9rem;
+      min-width: 1.5em;
+      padding: 0.15em 0.35em;
+    }
+
+    .octordle-win-round {
+      color: var(--muted);
+    }
+
+    .octordle-win-word {
+      font-weight: 600;
+    }
+
+    .octordle-content {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .octordle-content .options-list {
+      align-self: stretch;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem;
+    }
+
+    .app-header {
+      position: relative;
+      width: 100%;
+      max-width: min(95vw, 900px);
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin: 0;
+      color: var(--text);
+    }
+
+    .dropdown-container {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .options-btn {
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .options-btn:hover {
+      background: var(--border);
+    }
+
+    .hamburger-icon {
+      display: block;
+      width: 18px;
+      height: 2px;
+      background: currentColor;
+      box-shadow: 0 5px 0 currentColor, 0 -5px 0 currentColor;
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      right: 0;
+      top: 100%;
+      margin-top: 4px;
+      min-width: 180px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.25rem 0;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .dropdown-menu.hidden {
+      display: none;
+    }
+
+    .dropdown-menu button {
+      display: block;
+      width: 100%;
+      padding: 0.6rem 1rem;
+      border: none;
+      background: none;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .dropdown-menu button:hover {
+      background: var(--border);
+    }
+
+    .override-panel,
+    .add-word-panel {
+      width: 100%;
+      max-width: calc(5 * var(--cell-size) + 4 * 5px);
+      margin: 0 auto 1rem;
+      padding: 0.75rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .override-panel input,
+    .add-word-panel input {
+      flex: 1;
+      min-width: 120px;
+      padding: 0.5rem 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem;
+      text-transform: lowercase;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+    }
+
+    .override-panel input:focus,
+    .add-word-panel input:focus {
+      outline: none;
+      border-color: var(--muted);
+    }
+
+    .override-panel .btn,
+    .add-word-panel .btn {
+      margin: 0;
+    }
+
+    .add-actual-word-popup input {
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 1rem;
+      padding: 0.5rem 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem;
+      text-transform: lowercase;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+    }
+
+    .add-actual-word-popup input:focus {
+      outline: none;
+      border-color: var(--muted);
+    }
+
+    .game {
+      width: 100%;
+      max-width: min(95vw, 900px);
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    #root {
+      width: 100%;
+    }
+
+    /* Up to 13 rows (Octordle) × 5 columns grid */
+    .grid {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 1.5rem;
+    }
+
+    .row {
+      display: flex;
+      gap: 5px;
+      justify-content: center;
+    }
+
+    .cell {
+      width: var(--cell-size);
+      height: var(--cell-size);
+      border: 2px solid var(--border-empty);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      background: var(--surface);
+      color: var(--text);
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    }
+
+    .cell.filled {
+      border-color: var(--border);
+    }
+
+    .cell.green {
+      background: var(--green);
+      border-color: var(--green);
+      color: white;
+    }
+
+    .cell.yellow {
+      background: var(--yellow);
+      border-color: var(--yellow);
+      color: white;
+    }
+
+    .cell.gray {
+      background: var(--gray);
+      border-color: var(--gray);
+      color: white;
+    }
+
+    .cell.current-row {
+      cursor: pointer;
+    }
+
+    .cell.current-row:hover {
+      border-color: #565656;
+    }
+
+    .cell.empty {
+      color: var(--border);
+    }
+
+    .cell.replay-pending {
+      background: var(--pending);
+      border-color: var(--pending);
+      color: var(--text);
+    }
+
+    /* Color buttons */
+    .color-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.4rem;
+      margin-bottom: 1rem;
+      width: calc(5 * var(--cell-size) + 4 * 5px);
+      max-width: 100%;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .color-buttons .yellow-btn {
+      grid-column: 1;
+      grid-row: 1;
+      width: 100%;
+    }
+
+    .color-buttons .green-btn {
+      grid-column: 2;
+      grid-row: 1;
+      width: 100%;
+    }
+
+    .color-buttons .gray-btn {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      width: 100%;
+    }
+
+    .color-btn {
+      height: 45px;
+      min-width: 0;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: white;
+      transition: transform 0.1s, opacity 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .color-btn:hover {
+      transform: scale(1.02);
+    }
+
+    .color-btn:active {
+      transform: scale(0.98);
+    }
+
+    .color-btn.green-btn {
+      background: var(--green);
+    }
+
+    .color-btn.yellow-btn {
+      background: var(--yellow);
+    }
+
+    .color-btn.gray-btn {
+      background: var(--gray);
+    }
+
+    .color-hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+
+    .btn {
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 600;
+      padding: 0.75rem 2rem;
+      background: #538d4e;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      margin-bottom: 1rem;
+    }
+
+    #submit,
+    #restart {
+      width: calc(5 * var(--cell-size) + 4 * 5px);
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .btn:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .stats {
+      font-size: 1.15rem;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    .stats strong {
+      color: var(--text);
+    }
+
+    .guaranteed-note {
+      color: #8fbc8f;
+      font-size: 1.35rem;
+      font-weight: 600;
+      text-align: center;
+      margin: 1rem 0 0.5rem;
+    }
+
+    .next-guess {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.1rem;
+      letter-spacing: 0.1em;
+      color: #8fbc8f;
+      margin-top: 0.25rem;
+    }
+
+    .options-list {
+      width: 100%;
+      max-width: 100%;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .options-list-title {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .options-list-scroll {
+      width: 100%;
+    }
+
+    .options-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+    }
+
+    .options-table th,
+    .options-table td {
+      padding: 0.2rem 0.5rem;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .option-score-h,
+    .option-score {
+      min-width: 3.5em;
+      color: var(--muted);
+    }
+
+    .option-score.determining,
+    .option-max.determining {
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    .option-max-h,
+    .option-max {
+      min-width: 3em;
+      color: var(--muted);
+    }
+
+    .option-word-h {
+      color: var(--muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .option-word {
+      color: var(--text);
+    }
+
+    .message {
+      width: calc(5 * var(--cell-size) + 4 * 5px);
+      max-width: 100%;
+      margin-left: auto;
+      margin-right: auto;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-top: 1rem;
+      font-size: 1rem;
+      text-align: center;
+    }
+
+    .message.win {
+      background: rgba(83, 141, 78, 0.25);
+      border: 1px solid var(--green);
+      color: #8fbc8f;
+    }
+
+    .message.lose {
+      background: rgba(180, 80, 80, 0.2);
+      border: 1px solid #b45050;
+      color: #d4a0a0;
+    }
+
+    .lose-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .lose-actions .btn {
+      margin-top: 0;
+    }
+
+    .btn-secondary {
+      background: var(--border);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      background: var(--muted);
+    }
+
+    .popup-link {
+      display: block;
+      margin-top: 0.75rem;
+      color: var(--muted);
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 0.95rem;
+      text-align: center;
+    }
+
+    .popup-link:hover {
+      color: var(--text);
+    }
+
+    .loading {
+      color: var(--muted);
+    }
+
+    .error {
+      color: #d48080;
+      margin-top: 1rem;
+    }
+
+    #confetti-container {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9999;
+      overflow: hidden;
+    }
+
+    .confetti-piece {
+      position: absolute;
+      top: -12px;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      animation: confetti-fall linear forwards;
+    }
+
+    @keyframes confetti-fall {
+      to {
+        transform: translateY(100vh) translateX(var(--drift, 0));
+        opacity: 0;
+      }
+    }
+
+    /* Results popup overlay — dimmed backdrop, popup in top third */
+    .octordle-results-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      z-index: 1000;
+      padding: 12vh 1.5rem 1.5rem;
+    }
+
+    .octordle-results-popup {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.75rem;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .results-popup-close {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 1.5rem;
+      line-height: 1;
+      cursor: pointer;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .results-popup-close:hover {
+      color: var(--text);
+      background: var(--border);
+    }
+
+    .octordle-results-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--green);
+      text-align: center;
+      margin: 0 0 1.25rem;
+    }
+
+    .octordle-results-words {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .octordle-results-col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .octordle-result-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .octordle-result-word {
+      color: var(--text);
+    }
+
+    .octordle-result-guesses {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.75em;
+      padding: 0.2em 0.5em;
+      background: var(--border);
+      border-radius: 6px;
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .octordle-result-clock {
+      opacity: 0.8;
+    }
+
+    .wordle-results-single {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      text-align: center;
+    }
+
+    .wordle-results-single .octordle-result-word {
+      font-size: 2rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: var(--text);
+    }
+
+    .wordle-results-single .octordle-result-guesses {
+      margin-top: 0.25rem;
+      font-size: 1.35rem;
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <h1>Wordle Solver</h1>
+    <div class="dropdown-container">
+      <button type="button" id="options-btn" class="options-btn" aria-haspopup="true" aria-expanded="false" title="Options"><span class="hamburger-icon"></span></button>
+      <div id="options-menu" class="dropdown-menu hidden">
+        <button type="button" id="menu-override">Override</button>
+        <button type="button" id="menu-add-word">Add word to list</button>
+        <button type="button" id="menu-wordle">Wordle</button>
+        <button type="button" id="menu-octordle">Octordle</button>
+      </div>
+    </div>
+  </header>
+  <main class="game">
+    <div id="root">
+      <p class="loading">Loading word list…</p>
+    </div>
+  </main>
+  <script type="module" src="dist/app.js"></script>
+</body>
+</html>
